@@ -3,7 +3,8 @@
 campaign, quote-tweeting the pinned announcement post.
 
 Usage:
-    python3 post_daily.py --text "Your tweet text here"
+    python3 post_daily.py --dry-run          # see today's screenshot/context, no API calls
+    python3 post_daily.py --text "Your tweet text here"   # actually post
 
 Behavior:
 - Reads campaign_config.json (same directory) for pinned_tweet_id,
@@ -128,11 +129,11 @@ def post_tweet(text, media_id, quote_tweet_id):
     return json.loads(body_text)
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--text", required=True, help="Tweet text to post today")
-    args = parser.parse_args()
-
+def resolve_today():
+    """Returns (shot_dict, day_index, config, skip_reason). Exactly one of
+    (shot_dict) or (skip_reason) is non-None. Pure/deterministic given
+    campaign_config.json + today's UTC date - no external state needed.
+    """
     with open(CONFIG_PATH) as f:
         config = json.load(f)
 
@@ -142,34 +143,67 @@ def main():
     screenshots = config.get("screenshots", [])
 
     if not pinned_tweet_id:
-        print("SKIP: pinned_tweet_id not set yet.")
-        return
+        return None, None, config, "pinned_tweet_id not set yet."
     if not start_date_str:
-        print("SKIP: campaign_start_date not set yet.")
-        return
+        return None, None, config, "campaign_start_date not set yet."
     if not screenshots:
-        print("SKIP: no screenshots configured.")
-        return
+        return None, None, config, "no screenshots configured."
 
     start_date = datetime.strptime(start_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     day_index = (today - start_date).days
 
     if day_index < 0:
-        print(f"SKIP: campaign has not started yet (starts {start_date_str}).")
-        return
+        return None, None, config, f"campaign has not started yet (starts {start_date_str})."
     if day_index >= campaign_days:
-        print(f"SKIP: campaign already finished (day_index={day_index} >= {campaign_days}).")
-        return
+        return None, None, config, f"campaign already finished (day_index={day_index} >= {campaign_days})."
 
     shot = screenshots[day_index % len(screenshots)]
+    return shot, day_index, config, None
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--text", help="Tweet text to post today (required unless --dry-run)")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print which screenshot/day today resolves to (or the skip reason) and exit "
+        "without calling the X API. Use this first to see what to write about.",
+    )
+    args = parser.parse_args()
+
+    shot, day_index, config, skip_reason = resolve_today()
+
+    if args.dry_run:
+        if skip_reason:
+            print(json.dumps({"skip_reason": skip_reason}))
+        else:
+            print(json.dumps({
+                "day_index": day_index,
+                "day_number": day_index + 1,
+                "campaign_days": config.get("campaign_days", 21),
+                "file": shot["file"],
+                "desc": shot.get("desc", ""),
+                "game_name": config.get("game_name", ""),
+                "game_blurb": config.get("game_blurb", ""),
+                "cta": config.get("cta", ""),
+            }, indent=2))
+        return
+
+    if skip_reason:
+        print(f"SKIP: {skip_reason}")
+        return
+    if not args.text:
+        raise SystemExit("--text is required when not using --dry-run")
+
     image_path = os.path.join(SCRIPT_DIR, shot["file"])
-    print(f"Day {day_index + 1}/{campaign_days}: using {shot['file']} ({shot.get('desc', '')})")
+    print(f"Day {day_index + 1}/{config.get('campaign_days', 21)}: using {shot['file']} ({shot.get('desc', '')})")
 
     media_id = upload_media(image_path)
     print("Uploaded media_id:", media_id)
 
-    result = post_tweet(args.text, media_id, pinned_tweet_id)
+    result = post_tweet(args.text, media_id, config["pinned_tweet_id"])
     print("Posted:", json.dumps(result, indent=2))
 
 
