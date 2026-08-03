@@ -4,35 +4,5 @@
   "campaign_days": 21,
   "game_name": "Destroy the Flag",
   "game_blurb": "Destroy the Flag is a fast-paced multiplayer party-shooter: teams throw bombs (knockback, freezing, haste) to defend their flag and destroy the enemy's, while a 3-phase match escalates into an optional 'Chaos Mode' that throws giant meteors, bouncing balls, freezing ice trails, and thrown knives into the arena. Built in Godot. Currently in Steam Playtest.",
-  "cta": "Sign up for the free Steam Playtest by following the link in the pinned post above (quoted by this post) and requesting access.",
-  "screenshots": [
-    {
-      "file": "screenshots/red_base.jpg",
-      "desc": "A team's home base: a flag on a pole standing in a stylized low-poly kitchen-themed arena."
-    },
-    {
-      "file": "screenshots/freerun.jpg",
-      "desc": "A player sprinting across the map early in a match, with the Phase 1 'Flags Invulnerable' countdown bar at the top of the screen."
-    },
-    {
-      "file": "screenshots/airstrike.jpg",
-      "desc": "Chaotic mid-fight combat with multiple bombs (knockback/freeze/haste) in the air at once."
-    },
-    {
-      "file": "screenshots/random_phase_meteor.jpg",
-      "desc": "Chaos Mode's 'Meteor' random event: a giant glowing meteor slowly descending toward the arena before it slams down and knocks everyone into the air."
-    },
-    {
-      "file": "screenshots/random_phase_bounces.jpg",
-      "desc": "Chaos Mode's 'Bounces' random event: oversized volleyballs and basketballs ricocheting around the arena, knocking back anyone they hit."
-    },
-    {
-      "file": "screenshots/random_phase_freezer.jpg",
-      "desc": "Chaos Mode's 'Freezer' random event: sliding ice cubes that leave a glowing frozen trail on the ground - stand on it too long and you get frozen solid."
-    },
-    {
-      "file": "screenshots/random_phase_knife_throwing.jpg",
-      "desc": "Chaos Mode's 'Knife Throwing' random event: a giant spinning knife hovers in the air before launching itself straight at the nearest player."
-    }
-  ]
+  "cta": "Sign up for the free Steam Playtest by following the link in the pinned post above (quoted by this post) and requesting access."
 }

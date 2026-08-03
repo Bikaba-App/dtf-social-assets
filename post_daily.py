@@ -8,11 +8,18 @@ Usage:
 
 Behavior:
 - Reads campaign_config.json (same directory) for pinned_tweet_id,
-  campaign_start_date, campaign_days, and the screenshot rotation list.
+  campaign_start_date, and campaign_days.
+- The screenshot pool is NOT listed in the config - it's discovered by
+  scanning the screenshots/ directory (sorted filename order) each run. Drop
+  a new .jpg/.jpeg/.png into screenshots/ and push it; it enters the
+  rotation automatically next time its index comes up, no config edit
+  needed. Whoever writes the caption (the calling agent, via --dry-run) is
+  expected to look at the actual image file to describe it - there is no
+  per-image desc field to maintain.
 - Computes which day of the campaign "today" (UTC date) is, and picks the
-  screenshot for that day deterministically (day_index % len(screenshots)).
-  No external state/memory is needed across runs, so this is safe to fire
-  from a stateless recurring cloud routine.
+  screenshot for that day deterministically (day_index % len(screenshot
+  files)). No external state/memory is needed across runs, so this is safe
+  to fire from a stateless recurring cloud routine.
 - Safety gates (all silent no-ops, exit code 0, so a misfire never posts):
     * pinned_tweet_id is null/empty -> skip
     * campaign_start_date is null/empty -> skip
@@ -36,6 +43,8 @@ from datetime import datetime, timezone
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "campaign_config.json")
+SCREENSHOTS_DIR = os.path.join(SCRIPT_DIR, "screenshots")
+IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png")
 
 # X (Twitter) OAuth1.0a user-context credentials for the Destroy the Flag
 # account. Scoped only to this account's posting ability.
@@ -129,10 +138,19 @@ def post_tweet(text, media_id, quote_tweet_id):
     return json.loads(body_text)
 
 
+def list_screenshots():
+    if not os.path.isdir(SCREENSHOTS_DIR):
+        return []
+    return sorted(
+        f for f in os.listdir(SCREENSHOTS_DIR) if f.lower().endswith(IMAGE_EXTENSIONS)
+    )
+
+
 def resolve_today():
-    """Returns (shot_dict, day_index, config, skip_reason). Exactly one of
-    (shot_dict) or (skip_reason) is non-None. Pure/deterministic given
-    campaign_config.json + today's UTC date - no external state needed.
+    """Returns (filename, day_index, config, skip_reason). Exactly one of
+    (filename) or (skip_reason) is non-None. Pure/deterministic given
+    campaign_config.json + the current contents of screenshots/ + today's
+    UTC date - no external state needed.
     """
     with open(CONFIG_PATH) as f:
         config = json.load(f)
@@ -140,14 +158,14 @@ def resolve_today():
     pinned_tweet_id = config.get("pinned_tweet_id")
     start_date_str = config.get("campaign_start_date")
     campaign_days = config.get("campaign_days", 21)
-    screenshots = config.get("screenshots", [])
+    screenshots = list_screenshots()
 
     if not pinned_tweet_id:
         return None, None, config, "pinned_tweet_id not set yet."
     if not start_date_str:
         return None, None, config, "campaign_start_date not set yet."
     if not screenshots:
-        return None, None, config, "no screenshots configured."
+        return None, None, config, "no screenshots found in screenshots/."
 
     start_date = datetime.strptime(start_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -158,8 +176,8 @@ def resolve_today():
     if day_index >= campaign_days:
         return None, None, config, f"campaign already finished (day_index={day_index} >= {campaign_days})."
 
-    shot = screenshots[day_index % len(screenshots)]
-    return shot, day_index, config, None
+    filename = screenshots[day_index % len(screenshots)]
+    return filename, day_index, config, None
 
 
 def main():
@@ -173,7 +191,7 @@ def main():
     )
     args = parser.parse_args()
 
-    shot, day_index, config, skip_reason = resolve_today()
+    filename, day_index, config, skip_reason = resolve_today()
 
     if args.dry_run:
         if skip_reason:
@@ -183,8 +201,10 @@ def main():
                 "day_index": day_index,
                 "day_number": day_index + 1,
                 "campaign_days": config.get("campaign_days", 21),
-                "file": shot["file"],
-                "desc": shot.get("desc", ""),
+                "file": f"screenshots/{filename}",
+                "note": "No pre-written description - look at the image file yourself "
+                        "(it's a real screenshot from the game) and write the caption "
+                        "based on what you actually see in it.",
                 "game_name": config.get("game_name", ""),
                 "game_blurb": config.get("game_blurb", ""),
                 "cta": config.get("cta", ""),
@@ -197,8 +217,8 @@ def main():
     if not args.text:
         raise SystemExit("--text is required when not using --dry-run")
 
-    image_path = os.path.join(SCRIPT_DIR, shot["file"])
-    print(f"Day {day_index + 1}/{config.get('campaign_days', 21)}: using {shot['file']} ({shot.get('desc', '')})")
+    image_path = os.path.join(SCREENSHOTS_DIR, filename)
+    print(f"Day {day_index + 1}/{config.get('campaign_days', 21)}: using screenshots/{filename}")
 
     media_id = upload_media(image_path)
     print("Uploaded media_id:", media_id)
